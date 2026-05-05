@@ -34,12 +34,18 @@ class GoogleConsoleService
         $sites = $service->sites->listSites()->getSiteEntry() ?? [];
 
         return collect($sites)
-            ->map(fn ($site) => [
-                'property_id' => $site->getSiteUrl(),
-                'url' => $site->getSiteUrl(),
-                'name' => Str::of($site->getSiteUrl())->replace(['sc-domain:', 'https://', 'http://'], '')->trim('/')->value(),
-                'type' => str_starts_with($site->getSiteUrl(), 'sc-domain:') ? 'sc-domain' : 'url-prefix',
-            ])
+            ->map(function ($site) {
+                $siteUrl = $site->getSiteUrl();
+                $isDomain = str_starts_with($siteUrl, 'sc-domain:');
+                $domain = Str::of($siteUrl)->replace(['sc-domain:', 'https://', 'http://'], '')->trim('/')->value();
+
+                return [
+                    'property_id' => $siteUrl,
+                    'url' => $isDomain ? 'https://'.$domain : $siteUrl,
+                    'name' => $domain,
+                    'type' => $isDomain ? 'sc-domain' : 'url-prefix',
+                ];
+            })
             ->values()
             ->all();
     }

@@ -274,6 +274,9 @@
                         @if ($propertyError)
                             <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{{ $propertyError }}</div>
                         @endif
+                        @if ($errors->any())
+                            <div class="mt-4 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">{{ $errors->first() }}</div>
+                        @endif
                         <div class="mt-6 grid gap-4 md:grid-cols-2">
                             @foreach ($properties as $property)
                                 <form method="POST" action="{{ route('projects.store') }}" class="rounded-3xl border border-white/10 bg-white/5 p-5">
