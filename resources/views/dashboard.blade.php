@@ -1,69 +1,275 @@
 <x-layouts.app>
-    <main class="mx-auto max-w-7xl px-6 py-8" x-data="{ tab: 'top' }">
-        <div class="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
-            <div>
-                <p class="text-sm uppercase tracking-[0.2em] text-teal-300">SEO Command Center</p>
-                <h1 class="mt-2 text-3xl font-semibold text-white">Hola, {{ $user->name }}</h1>
-                <p class="mt-2 text-slate-300">{{ $project ? "Proyecto activo: {$project->name}" : 'Conecta una propiedad de Search Console para comenzar.' }}</p>
-            </div>
-            <div class="flex flex-wrap gap-3">
-                @if ($project)
-                    <form method="POST" action="{{ route('dashboard.sync') }}">
-                        @csrf
-                        <button class="rounded-2xl bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950">Sincronizar 30 dias</button>
-                    </form>
-                    <form method="POST" action="{{ route('dashboard.audit') }}">
-                        @csrf
-                        <button class="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white">Lanzar auditoria</button>
-                    </form>
-                @endif
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button class="rounded-2xl border border-white/15 px-5 py-3 text-sm text-slate-300">Salir</button>
-                </form>
-            </div>
-        </div>
+    @php
+        $hasProject = (bool) $project;
+        $hasKeywordData = $summary['keywords'] > 0;
+        $hasTrackedKeywords = $summary['tracked_keywords'] > 0;
+        $hasCompetitors = $summary['competitors'] > 0;
+        $hasCatalog = $summary['catalog_pages'] > 0;
+        $hasOrganicPages = $summary['organic_pages'] > 0;
+        $hasSerpSnapshot = $latestSerpSnapshot !== null;
+        $hasCrawl = $latestCrawlRun !== null;
+        $journeySteps = [
+            [
+                'title' => 'Conectar propiedad',
+                'description' => 'Selecciona tu propiedad de Search Console para crear el proyecto base.',
+                'done' => $hasProject,
+                'href' => '#project-setup',
+                'action' => $hasProject ? 'Configurado' : 'Ir a conectar',
+            ],
+            [
+                'title' => 'Sincronizar 30 dias',
+                'description' => 'Trae clicks, impresiones y posiciones para encender el panel principal.',
+                'done' => $hasKeywordData,
+                'href' => '#overview',
+                'action' => $hasKeywordData ? 'Datos cargados' : 'Lanzar sync',
+            ],
+            [
+                'title' => 'Agregar competidores',
+                'description' => 'Carga dominios rivales para comparar share of voice y brechas.',
+                'done' => $hasCompetitors,
+                'href' => '#competitors',
+                'action' => $hasCompetitors ? 'Competidores listos' : 'Agregar dominios',
+            ],
+            [
+                'title' => 'Definir keywords',
+                'description' => 'El tracking SERP necesita keywords objetivo, pais e idioma.',
+                'done' => $hasTrackedKeywords,
+                'href' => '#keywords',
+                'action' => $hasTrackedKeywords ? 'Keywords listas' : 'Agregar keywords',
+            ],
+            [
+                'title' => 'Ejecutar tracking SERP',
+                'description' => 'Genera snapshots para ver posiciones tuyas y de la competencia.',
+                'done' => $hasSerpSnapshot,
+                'href' => '#serp-tracking',
+                'action' => $hasSerpSnapshot ? 'Ver tracking' : 'Correr SERP',
+            ],
+            [
+                'title' => 'Conectar fuentes extra',
+                'description' => 'Activa GA4, Magento y crawl para enriquecer prioridades y oportunidades.',
+                'done' => $hasOrganicPages || $hasCatalog || $hasCrawl,
+                'href' => '#connections',
+                'action' => ($hasOrganicPages || $hasCatalog || $hasCrawl) ? 'Revisar conexiones' : 'Completar setup',
+            ],
+        ];
+        $nextPendingStep = collect($journeySteps)->firstWhere('done', false);
+        $menuItems = [
+            ['id' => 'overview', 'label' => 'Resumen'],
+            ['id' => 'insights', 'label' => 'Insights'],
+            ['id' => 'connections', 'label' => 'Conexiones'],
+            ['id' => 'opportunities', 'label' => 'Prioridades'],
+            ['id' => 'competitors', 'label' => 'Competidores'],
+            ['id' => 'keywords', 'label' => 'Keywords'],
+            ['id' => 'catalog', 'label' => 'Magento'],
+            ['id' => 'organic', 'label' => 'GA4'],
+            ['id' => 'serp-tracking', 'label' => 'SERP'],
+            ['id' => 'crawl', 'label' => 'Crawler'],
+            ['id' => 'gap', 'label' => 'Gap'],
+            ['id' => 'audit', 'label' => 'Auditoria'],
+        ];
+    @endphp
 
-        @if (session('status'))
-            <div class="mb-6 rounded-2xl border border-teal-400/20 bg-teal-400/10 px-5 py-4 text-sm text-teal-100">{{ session('status') }}</div>
-        @endif
+    <main
+        class="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8"
+        x-data="{
+            tab: 'top',
+            mobileMenu: false,
+            activeSection: 'overview',
+            setSectionFromHash() {
+                const hash = window.location.hash.replace('#', '');
+                if (hash) {
+                    this.activeSection = hash;
+                }
+            }
+        }"
+        x-init="setSectionFromHash(); window.addEventListener('hashchange', () => setSectionFromHash())"
+    >
+        <div class="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+            <aside class="xl:sticky xl:top-6 xl:self-start">
+                <div class="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-2xl shadow-black/20 backdrop-blur">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-xs uppercase tracking-[0.28em] text-teal-300">SEO Navigator</p>
+                            <h1 class="mt-3 text-2xl font-semibold text-white">Hola, {{ $user->name }}</h1>
+                            <p class="mt-2 text-sm text-slate-400">{{ $project ? $project->name : 'Aun no has conectado una propiedad.' }}</p>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-2xl border border-white/10 px-3 py-2 text-xs text-slate-300 xl:hidden"
+                            @click="mobileMenu = !mobileMenu"
+                        >
+                            Menu
+                        </button>
+                    </div>
 
-        <div class="mb-6 grid gap-4 md:grid-cols-6">
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Keywords rastreadas</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['keywords']) }}</p>
-            </div>
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Clicks acumulados</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['clicks']) }}</p>
-            </div>
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Impresiones acumuladas</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['impressions']) }}</p>
-            </div>
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Keywords objetivo</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['tracked_keywords']) }}</p>
-            </div>
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Competidores</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['competitors']) }}</p>
-            </div>
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Catalog pages</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['catalog_pages']) }}</p>
-            </div>
-            <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
-                <p class="text-sm text-slate-400">Landing pages SEO</p>
-                <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['organic_pages']) }}</p>
-            </div>
-        </div>
+                    <div class="mt-5 rounded-3xl border border-teal-400/20 bg-gradient-to-br from-teal-400/12 via-sky-400/8 to-transparent p-4">
+                        <p class="text-xs uppercase tracking-[0.22em] text-teal-200">Journey de inicio</p>
+                        <p class="mt-3 text-sm text-slate-200">
+                            {{ $nextPendingStep ? 'Siguiente paso recomendado: '.$nextPendingStep['title'].'.' : 'Tu setup base ya esta completo. Ahora toca iterar y medir.' }}
+                        </p>
+                        <p class="mt-2 text-xs text-slate-400">
+                            {{ $nextPendingStep ? $nextPendingStep['description'] : 'Usa el menu para ir directo a tracking, oportunidades y auditorias.' }}
+                        </p>
+                    </div>
 
-        <div class="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+                    <nav class="mt-5 hidden space-y-2 xl:block">
+                        @foreach ($menuItems as $item)
+                            <a
+                                href="#{{ $item['id'] }}"
+                                class="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition"
+                                :class="activeSection === '{{ $item['id'] }}'
+                                    ? 'border-teal-400/30 bg-teal-400/10 text-white'
+                                    : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:text-white'"
+                                @click="activeSection = '{{ $item['id'] }}'"
+                            >
+                                <span>{{ $item['label'] }}</span>
+                                <span class="text-xs text-slate-500">#</span>
+                            </a>
+                        @endforeach
+                    </nav>
+
+                    <div x-show="mobileMenu" x-cloak class="mt-5 grid gap-2 xl:hidden">
+                        @foreach ($menuItems as $item)
+                            <a
+                                href="#{{ $item['id'] }}"
+                                class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300"
+                                @click="activeSection = '{{ $item['id'] }}'; mobileMenu = false"
+                            >
+                                {{ $item['label'] }}
+                            </a>
+                        @endforeach
+                    </div>
+
+                    <div class="mt-6 space-y-3 border-t border-white/10 pt-5">
+                        <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                            <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Estado actual</p>
+                            <p class="mt-2 text-sm text-slate-200">{{ $hasProject ? 'Proyecto conectado y listo para operar.' : 'Falta conectar Search Console para desbloquear el panel.' }}</p>
+                        </div>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button class="w-full rounded-2xl border border-white/15 px-4 py-3 text-sm text-slate-300 transition hover:border-white/25 hover:text-white">Salir</button>
+                        </form>
+                    </div>
+                </div>
+            </aside>
+
             <section class="space-y-6">
+                <section id="overview" class="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+                    <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <p class="text-sm uppercase tracking-[0.24em] text-teal-300">SEO Command Center</p>
+                            <h2 class="mt-2 text-3xl font-semibold text-white">Panel operativo con recorrido guiado</h2>
+                            <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-300">
+                                Ya no tienes que adivinar donde va cada cosa. Usa el menu lateral para ir a proyecto, competidores,
+                                keywords, tracking, GA4, Magento, crawler y auditoria tecnica.
+                            </p>
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            @if ($project)
+                                <form method="POST" action="{{ route('dashboard.sync') }}">
+                                    @csrf
+                                    <button class="w-full rounded-2xl bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950">Sincronizar 30 dias</button>
+                                </form>
+                                <form method="POST" action="{{ route('dashboard.audit') }}">
+                                    @csrf
+                                    <button class="w-full rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white">Lanzar auditoria</button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+
+                    @if (session('status'))
+                        <div class="mt-5 rounded-2xl border border-teal-400/20 bg-teal-400/10 px-5 py-4 text-sm text-teal-100">{{ session('status') }}</div>
+                    @endif
+
+                    <div class="mt-6 grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-sm text-slate-400">Journey de inicio</p>
+                                    <p class="mt-2 text-lg font-semibold text-white">Ruta recomendada para poblar el sistema</p>
+                                </div>
+                                <p class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+                                    {{ collect($journeySteps)->where('done', true)->count() }}/{{ count($journeySteps) }} listo
+                                </p>
+                            </div>
+                            <div class="mt-5 grid gap-3">
+                                @foreach ($journeySteps as $index => $step)
+                                    <a href="{{ $step['href'] }}" class="rounded-2xl border {{ $step['done'] ? 'border-teal-400/20 bg-teal-400/8' : 'border-white/10 bg-white/5' }} px-4 py-4 transition hover:border-white/20">
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div class="flex gap-4">
+                                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl {{ $step['done'] ? 'bg-teal-400 text-slate-950' : 'bg-slate-800 text-slate-300' }}">
+                                                    {{ $index + 1 }}
+                                                </div>
+                                                <div>
+                                                    <p class="font-medium text-white">{{ $step['title'] }}</p>
+                                                    <p class="mt-1 text-sm text-slate-400">{{ $step['description'] }}</p>
+                                                </div>
+                                            </div>
+                                            <span class="rounded-full border px-3 py-1 text-xs {{ $step['done'] ? 'border-teal-400/20 text-teal-200' : 'border-white/10 text-slate-400' }}">
+                                                {{ $step['action'] }}
+                                            </span>
+                                        </div>
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Que vas a ver aqui</p>
+                            <div class="mt-4 grid gap-3">
+                                <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                    <p class="text-sm font-medium text-white">Competidores</p>
+                                    <p class="mt-1 text-xs text-slate-400">Dominios de tiendas rivales para comparar presencia.</p>
+                                </div>
+                                <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                    <p class="text-sm font-medium text-white">Tracking SERP</p>
+                                    <p class="mt-1 text-xs text-slate-400">Snapshots por keyword, pais y dispositivo.</p>
+                                </div>
+                                <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                    <p class="text-sm font-medium text-white">Fuentes de datos</p>
+                                    <p class="mt-1 text-xs text-slate-400">Search Console, GA4, Magento, PageSpeed y crawler.</p>
+                                </div>
+                            </div>
+                            <p class="mt-4 text-xs text-slate-500">Recuerda: los botones de sync y tracking encolan trabajos. Debe correr `php artisan queue:work` para procesarlos.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 grid gap-4 md:grid-cols-3 xl:grid-cols-7">
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Keywords rastreadas</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['keywords']) }}</p>
+                        </div>
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Clicks acumulados</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['clicks']) }}</p>
+                        </div>
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Impresiones</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['impressions']) }}</p>
+                        </div>
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Keywords objetivo</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['tracked_keywords']) }}</p>
+                        </div>
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Competidores</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['competitors']) }}</p>
+                        </div>
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Catalog pages</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['catalog_pages']) }}</p>
+                        </div>
+                        <div class="rounded-[1.75rem] border border-white/10 bg-slate-900/80 p-5">
+                            <p class="text-sm text-slate-400">Landing pages SEO</p>
+                            <p class="mt-3 text-4xl font-semibold">{{ number_format($summary['organic_pages']) }}</p>
+                        </div>
+                    </div>
+                </section>
+
                 @unless ($project)
-                    <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
-                        <h2 class="text-xl font-semibold">Selecciona tu propiedad</h2>
+                    <section id="project-setup" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                        <h2 class="text-xl font-semibold text-white">Selecciona tu propiedad</h2>
                         <p class="mt-2 text-sm text-slate-400">La lista viene de Search Console cuando Google esta conectado. En modo demo se muestran propiedades simuladas.</p>
                         @if ($propertyError)
                             <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{{ $propertyError }}</div>
@@ -82,75 +288,87 @@
                                 </form>
                             @endforeach
                         </div>
-                    </div>
+                    </section>
                 @else
-                    <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
-                        <div class="mb-4 flex items-center justify-between">
+                    <section id="project-setup" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                                <h2 class="text-xl font-semibold">Evolucion SEO</h2>
-                                <p class="text-sm text-slate-400">Clicks e impresiones de los ultimos 30 dias.</p>
+                                <h2 class="text-xl font-semibold text-white">Proyecto activo</h2>
+                                <p class="mt-2 text-sm text-slate-400">Esta es tu base para Search Console, tracking y conexiones adicionales.</p>
                             </div>
-                            <div class="text-right text-sm text-slate-400">
-                                <p>Ultima sincronizacion</p>
-                                <p class="text-slate-200">{{ $project->last_synced_at?->diffForHumans() ?? 'Pendiente' }}</p>
-                            </div>
-                        </div>
-                        <canvas id="seoTrendChart" height="120"></canvas>
-                    </div>
-
-                    <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
-                        <div class="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 class="text-xl font-semibold">Insights accionables</h2>
-                                <p class="text-sm text-slate-400">Top keywords por clicks y quick wins por impresiones.</p>
-                            </div>
-                            <div class="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 text-sm">
-                                <button class="rounded-xl px-4 py-2" :class="tab === 'top' ? 'bg-white text-slate-900' : 'text-slate-300'" @click="tab = 'top'">Top 10</button>
-                                <button class="rounded-xl px-4 py-2" :class="tab === 'wins' ? 'bg-white text-slate-900' : 'text-slate-300'" @click="tab = 'wins'">Quick Wins</button>
+                            <div class="rounded-2xl border border-teal-400/20 bg-teal-400/10 px-4 py-3 text-sm text-teal-100">
+                                {{ $project->name }} · {{ $project->google_property_id }}
                             </div>
                         </div>
+                    </section>
 
-                        <div x-show="tab === 'top'" x-cloak class="space-y-3">
-                            @forelse ($topKeywords as $keyword)
-                                <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                                    <div>
-                                        <p class="font-medium text-white">{{ $keyword->keyword }}</p>
-                                        <p class="text-sm text-slate-400">Posicion media {{ number_format($keyword->avg_position, 1) }}</p>
-                                    </div>
-                                    <div class="text-right">
-                                        <p class="font-semibold text-teal-300">{{ number_format($keyword->clicks) }} clicks</p>
-                                        <p class="text-sm text-slate-400">{{ number_format($keyword->impressions) }} impresiones</p>
-                                    </div>
+                    <section id="insights" class="space-y-6">
+                        <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                            <div class="mb-4 flex items-center justify-between">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-white">Evolucion SEO</h2>
+                                    <p class="text-sm text-slate-400">Clicks e impresiones de los ultimos 30 dias.</p>
                                 </div>
-                            @empty
-                                <p class="text-sm text-slate-400">Aun no hay datos sincronizados.</p>
-                            @endforelse
-                        </div>
-
-                        <div x-show="tab === 'wins'" x-cloak class="space-y-3">
-                            @forelse ($quickWins as $keyword)
-                                <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                                    <div>
-                                        <p class="font-medium text-white">{{ $keyword->keyword }}</p>
-                                        <p class="text-sm text-amber-300">Posicion media {{ number_format($keyword->avg_position, 1) }}</p>
-                                    </div>
-                                    <div class="text-right">
-                                        <p class="font-semibold text-white">{{ number_format($keyword->impressions) }} impresiones</p>
-                                        <p class="text-sm text-slate-400">{{ number_format($keyword->clicks) }} clicks</p>
-                                    </div>
+                                <div class="text-right text-sm text-slate-400">
+                                    <p>Ultima sincronizacion</p>
+                                    <p class="text-slate-200">{{ $project->last_synced_at?->diffForHumans() ?? 'Pendiente' }}</p>
                                 </div>
-                            @empty
-                                <p class="text-sm text-slate-400">Todavia no se detectan quick wins entre posicion 11 y 20.</p>
-                            @endforelse
+                            </div>
+                            <canvas id="seoTrendChart" height="120"></canvas>
                         </div>
-                    </div>
-                @endunless
 
-                @if ($project)
-                    <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                        <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                            <div class="mb-6 flex items-center justify-between">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-white">Insights accionables</h2>
+                                    <p class="text-sm text-slate-400">Top keywords por clicks y quick wins por impresiones.</p>
+                                </div>
+                                <div class="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 text-sm">
+                                    <button class="rounded-xl px-4 py-2" :class="tab === 'top' ? 'bg-white text-slate-900' : 'text-slate-300'" @click="tab = 'top'">Top 10</button>
+                                    <button class="rounded-xl px-4 py-2" :class="tab === 'wins' ? 'bg-white text-slate-900' : 'text-slate-300'" @click="tab = 'wins'">Quick Wins</button>
+                                </div>
+                            </div>
+
+                            <div x-show="tab === 'top'" x-cloak class="space-y-3">
+                                @forelse ($topKeywords as $keyword)
+                                    <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                        <div>
+                                            <p class="font-medium text-white">{{ $keyword->keyword }}</p>
+                                            <p class="text-sm text-slate-400">Posicion media {{ number_format($keyword->avg_position, 1) }}</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="font-semibold text-teal-300">{{ number_format($keyword->clicks) }} clicks</p>
+                                            <p class="text-sm text-slate-400">{{ number_format($keyword->impressions) }} impresiones</p>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <p class="text-sm text-slate-400">Aun no hay datos sincronizados.</p>
+                                @endforelse
+                            </div>
+
+                            <div x-show="tab === 'wins'" x-cloak class="space-y-3">
+                                @forelse ($quickWins as $keyword)
+                                    <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                        <div>
+                                            <p class="font-medium text-white">{{ $keyword->keyword }}</p>
+                                            <p class="text-sm text-amber-300">Posicion media {{ number_format($keyword->avg_position, 1) }}</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="font-semibold text-white">{{ number_format($keyword->impressions) }} impresiones</p>
+                                            <p class="text-sm text-slate-400">{{ number_format($keyword->clicks) }} clicks</p>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <p class="text-sm text-slate-400">Todavia no se detectan quick wins entre posicion 11 y 20.</p>
+                                @endforelse
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="connections" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                         <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                                <h2 class="text-xl font-semibold">Conexiones del proyecto</h2>
+                                <h2 class="text-xl font-semibold text-white">Conexiones del proyecto</h2>
                                 <p class="text-sm text-slate-400">Aqui conectamos Magento y afinamos Google para que el proyecto traiga catalogo, landings y datos SEO reales.</p>
                             </div>
                             <div class="flex flex-wrap gap-3">
@@ -207,11 +425,11 @@
                         </form>
                     </section>
 
-                    <div class="grid gap-6 lg:grid-cols-2">
+                    <section id="opportunities" class="grid gap-6 lg:grid-cols-2">
                         <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                             <div class="flex items-center justify-between gap-4">
                                 <div>
-                                    <h2 class="text-xl font-semibold">Prioridades SEO</h2>
+                                    <h2 class="text-xl font-semibold text-white">Prioridades SEO</h2>
                                     <p class="text-sm text-slate-400">Cruce de crawl, GA4, Magento y conversiones para decidir por donde atacar primero.</p>
                                 </div>
                                 <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $pageOpportunities->count() }} paginas</span>
@@ -240,7 +458,7 @@
                         <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                             <div class="flex items-center justify-between gap-4">
                                 <div>
-                                    <h2 class="text-xl font-semibold">Oportunidades de keyword</h2>
+                                    <h2 class="text-xl font-semibold text-white">Oportunidades de keyword</h2>
                                     <p class="text-sm text-slate-400">Keywords con espacio real para subir CTR o romper el top 10.</p>
                                 </div>
                                 <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $keywordOpportunities->count() }} detectadas</span>
@@ -261,26 +479,27 @@
                                         </div>
                                     </div>
                                 @empty
-                                    <p class="text-sm text-slate-400">Aun no hay suficientes keywords para priorizar oportunidades.</p>
+                                    <p class="text-sm text-slate-400">Todavia no hay suficiente data para priorizar keywords.</p>
                                 @endforelse
                             </div>
                         </section>
+                    </section>
 
-                        <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                    <section class="grid gap-6 lg:grid-cols-2">
+                        <section id="competitors" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                             <div class="flex items-center justify-between gap-4">
                                 <div>
-                                    <h2 class="text-xl font-semibold">Competencia</h2>
-                                    <p class="text-sm text-slate-400">Dominios que vamos a medir contra tu tienda.</p>
+                                    <h2 class="text-xl font-semibold text-white">Competidores</h2>
+                                    <p class="text-sm text-slate-400">Tiendas y dominios rivales que quieres seguir en los resultados.</p>
                                 </div>
                                 <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $competitors->count() }} guardados</span>
                             </div>
-
                             <form method="POST" action="{{ route('competitors.store') }}" class="mt-6 space-y-3">
                                 @csrf
                                 <input name="domain" placeholder="competidor.com" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500" required>
                                 <input name="name" placeholder="Nombre visible" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500">
                                 <input name="notes" placeholder="Notas opcionales" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500">
-                                <button class="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900">Agregar competidor</button>
+                                <button class="rounded-2xl bg-teal-400 px-4 py-3 text-sm font-semibold text-slate-950">Guardar competidor</button>
                             </form>
 
                             <div class="mt-6 space-y-3">
@@ -293,20 +512,19 @@
                                         @endif
                                     </div>
                                 @empty
-                                    <p class="text-sm text-slate-400">Todavia no has agregado competidores para comparar rankings.</p>
+                                    <p class="text-sm text-slate-400">Base para monitorear SERP, share of voice y keyword gap.</p>
                                 @endforelse
                             </div>
                         </section>
 
-                        <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                        <section id="keywords" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                             <div class="flex items-center justify-between gap-4">
                                 <div>
-                                    <h2 class="text-xl font-semibold">Keywords objetivo</h2>
-                                    <p class="text-sm text-slate-400">Base para monitorear SERP, share of voice y keyword gap.</p>
+                                    <h2 class="text-xl font-semibold text-white">Keywords objetivo</h2>
+                                    <p class="text-sm text-slate-400">Estas keywords son la base del tracking competitivo.</p>
                                 </div>
                                 <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $trackedKeywords->count() }} activas</span>
                             </div>
-
                             <form method="POST" action="{{ route('tracked-keywords.store') }}" class="mt-6 grid gap-3">
                                 @csrf
                                 <input name="keyword" placeholder="zapatillas de running hombre" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500" required>
@@ -354,13 +572,13 @@
                                 @endforelse
                             </div>
                         </section>
-                    </div>
+                    </section>
 
-                    <div class="grid gap-6 lg:grid-cols-2">
-                        <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                    <section class="grid gap-6 lg:grid-cols-2">
+                        <section id="catalog" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                             <div class="flex items-center justify-between gap-4">
                                 <div>
-                                    <h2 class="text-xl font-semibold">Catalogo Magento</h2>
+                                    <h2 class="text-xl font-semibold text-white">Catalogo Magento</h2>
                                     <p class="text-sm text-slate-400">Productos, categorias y CMS sincronizados para auditoria SEO.</p>
                                 </div>
                                 <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $topCatalogPages->count() }} visibles</span>
@@ -382,10 +600,10 @@
                             </div>
                         </section>
 
-                        <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                        <section id="organic" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                             <div class="flex items-center justify-between gap-4">
                                 <div>
-                                    <h2 class="text-xl font-semibold">Landing pages organicas</h2>
+                                    <h2 class="text-xl font-semibold text-white">Landing pages organicas</h2>
                                     <p class="text-sm text-slate-400">GA4 organico para cruzar rendimiento con Search Console y catalogo.</p>
                                 </div>
                                 <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $topOrganicPages->count() }} paginas</span>
@@ -410,9 +628,17 @@
                             </div>
                         </section>
 
-                        <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
-                            <h2 class="text-xl font-semibold">SERP Tracking</h2>
-                            <p class="mt-2 text-sm text-slate-400">La estructura ya esta lista para guardar snapshots por keyword, dispositivo y pais.</p>
+                        <section id="serp-tracking" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-white">SERP Tracking</h2>
+                                    <p class="mt-2 text-sm text-slate-400">Aqui ves el ultimo snapshot de posiciones tuyas y de la competencia.</p>
+                                </div>
+                                <form method="POST" action="{{ route('project.run-serp') }}">
+                                    @csrf
+                                    <button class="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">Run SERP</button>
+                                </form>
+                            </div>
                             @if ($latestSerpSnapshot)
                                 <div class="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
                                     <p class="text-sm text-slate-400">Ultimo snapshot</p>
@@ -435,14 +661,22 @@
                                 </div>
                             @else
                                 <div class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                                    Aun no hay snapshots SERP. Ya puedes lanzar el primero desde Run SERP.
+                                    Aun no hay snapshots SERP. Primero agrega keywords y luego lanza Run SERP.
                                 </div>
                             @endif
                         </section>
 
-                        <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
-                            <h2 class="text-xl font-semibold">Crawler SEO</h2>
-                            <p class="mt-2 text-sm text-slate-400">Tambien queda preparada la capa para guardar corridas de rastreo y hallazgos por URL.</p>
+                        <section id="crawl" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-white">Crawler SEO</h2>
+                                    <p class="mt-2 text-sm text-slate-400">Resumen de la ultima corrida de rastreo y sus hallazgos.</p>
+                                </div>
+                                <form method="POST" action="{{ route('project.run-crawl') }}">
+                                    @csrf
+                                    <button class="rounded-2xl border border-teal-400/30 bg-teal-400/10 px-4 py-3 text-sm font-semibold text-teal-200">Run Crawl</button>
+                                </form>
+                            </div>
                             @if ($latestCrawlRun)
                                 <div class="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
                                     <p class="text-sm text-slate-400">Ultima corrida</p>
@@ -473,16 +707,16 @@
                                 </div>
                             @else
                                 <div class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                                    Aun no hay corridas de crawl. Ya puedes lanzar la primera desde el boton Run Crawl.
+                                    Aun no hay corridas de crawl. Puedes lanzar la primera desde este bloque.
                                 </div>
                             @endif
                         </section>
-                    </div>
+                    </section>
 
-                    <section class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
+                    <section id="gap" class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                         <div class="flex items-center justify-between gap-4">
                             <div>
-                                <h2 class="text-xl font-semibold">Competitor Gap</h2>
+                                <h2 class="text-xl font-semibold text-white">Competitor Gap</h2>
                                 <p class="text-sm text-slate-400">Keywords donde un competidor ya va por delante y tu dominio tiene margen claro.</p>
                             </div>
                             <span class="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{{ $competitorGaps->count() }} gaps</span>
@@ -499,10 +733,14 @@
                             @endforelse
                         </div>
                     </section>
-                @endif
+                @endunless
             </section>
+        </div>
+    </main>
 
-            <aside class="space-y-6">
+    @if ($project)
+        <section id="audit" class="mx-auto mt-6 max-w-[1600px] px-4 pb-8 sm:px-6 lg:px-8">
+            <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
                     <p class="text-sm uppercase tracking-[0.2em] text-slate-400">Auditoria tecnica</p>
                     <div class="mt-5 grid grid-cols-2 gap-4">
@@ -519,7 +757,7 @@
                 </div>
 
                 <div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6">
-                    <h2 class="text-xl font-semibold">Stack del MVP</h2>
+                    <h2 class="text-xl font-semibold text-white">Stack del MVP</h2>
                     <ul class="mt-4 space-y-3 text-sm text-slate-300">
                         <li>Laravel 13 sobre PHP 8.3.</li>
                         <li>MySQL 8 listo en migraciones; localmente arranca con SQLite.</li>
@@ -527,11 +765,9 @@
                         <li>Tailwind CDN, Alpine.js y Chart.js sin build frontend.</li>
                     </ul>
                 </div>
-            </aside>
-        </div>
-    </main>
+            </div>
+        </section>
 
-    @if ($project)
         <script>
             const ctx = document.getElementById('seoTrendChart');
             if (ctx) {
