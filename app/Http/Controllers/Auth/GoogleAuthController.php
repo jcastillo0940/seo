@@ -6,21 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
 class GoogleAuthController extends Controller
 {
     public function redirect(): RedirectResponse
     {
-        if (! class_exists(Socialite::class) && config('seo.demo_mode')) {
-            $user = User::firstOrCreate(
-                ['email' => 'demo@seo-tool.test'],
-                ['name' => 'Demo SEO User', 'password' => bcrypt(str()->random(32))]
-            );
-
-            Auth::login($user, true);
-
-            return redirect()->route('dashboard')->with('status', 'Sesion demo iniciada. Instala Socialite para conectar Google real.');
+        if (config('seo.demo_mode')) {
+            abort(403, 'El modo demo no puede usarse en un acceso publico.');
         }
 
         return Socialite::driver('google')
@@ -37,7 +31,13 @@ class GoogleAuthController extends Controller
 
     public function callback(): RedirectResponse
     {
-        $googleUser = Socialite::driver('google')->stateless()->user();
+        $googleUser = Socialite::driver('google')->user();
+
+        if (! $this->isAllowedEmail((string) $googleUser->getEmail())) {
+            return redirect()
+                ->route('home')
+                ->with('status', 'Tu cuenta de Google no esta autorizada para acceder.');
+        }
 
         $user = User::updateOrCreate(
             ['email' => $googleUser->getEmail()],
@@ -63,5 +63,25 @@ class GoogleAuthController extends Controller
         request()->session()->regenerateToken();
 
         return redirect()->route('home');
+    }
+
+    private function isAllowedEmail(string $email): bool
+    {
+        $email = Str::lower(trim($email));
+        $allowedEmails = config('auth.access.allowed_emails', []);
+        $allowedDomains = config('auth.access.allowed_domains', []);
+        $requireAllowlist = (bool) config('auth.access.require_allowlist', true);
+
+        if (! $requireAllowlist && $allowedEmails === [] && $allowedDomains === []) {
+            return true;
+        }
+
+        if (in_array($email, $allowedEmails, true)) {
+            return true;
+        }
+
+        $domain = Str::after($email, '@');
+
+        return $domain !== $email && in_array($domain, $allowedDomains, true);
     }
 }

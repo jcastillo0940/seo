@@ -114,4 +114,16 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    'access' => [
+        'allowed_emails' => array_values(array_filter(array_map(
+            fn (string $value) => strtolower(trim($value)),
+            explode(',', (string) env('AUTH_ALLOWED_EMAILS', ''))
+        ))),
+        'allowed_domains' => array_values(array_filter(array_map(
+            fn (string $value) => strtolower(trim($value)),
+            explode(',', (string) env('AUTH_ALLOWED_DOMAINS', ''))
+        ))),
+        'require_allowlist' => env('AUTH_REQUIRE_ALLOWLIST', true),
+    ],
+
 ];

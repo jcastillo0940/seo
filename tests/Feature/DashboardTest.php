@@ -9,17 +9,26 @@ use App\Models\TrackedKeyword;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Laravel\Socialite\Contracts\User as SocialiteUserContract;
+use Laravel\Socialite\Facades\Socialite;
+use Mockery;
 use Tests\TestCase;
 
 class DashboardTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_guest_sees_homepage(): void
+    public function test_guest_sees_login_page(): void
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('SEO Tool MVP');
+            ->assertSee('Inicia sesion');
+    }
+
+    public function test_guest_cannot_access_dashboard(): void
+    {
+        $this->get('/dashboard')
+            ->assertRedirect('/login');
     }
 
     public function test_authenticated_user_sees_dashboard_metrics(): void
@@ -206,5 +215,23 @@ class DashboardTest extends TestCase
             ->assertRedirect();
 
         Queue::assertPushed(\App\Jobs\RunSeoCrawl::class);
+    }
+
+    public function test_unauthorized_google_user_is_rejected(): void
+    {
+        config()->set('seo.demo_mode', false);
+        config()->set('auth.access.allowed_emails', ['allowed@example.com']);
+        config()->set('auth.access.allowed_domains', []);
+        config()->set('auth.access.require_allowlist', true);
+
+        $socialiteUser = Mockery::mock(SocialiteUserContract::class);
+        $socialiteUser->shouldReceive('getEmail')->andReturn('blocked@example.com');
+
+        Socialite::shouldReceive('driver->user')->andReturn($socialiteUser);
+
+        $this->get('/auth/google/callback')
+            ->assertRedirect('/');
+
+        $this->assertGuest();
     }
 }

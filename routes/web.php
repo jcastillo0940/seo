@@ -10,11 +10,12 @@ use App\Http\Controllers\SerpTrackingController;
 use App\Http\Controllers\TrackedKeywordController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => auth()->check() ? redirect()->route('dashboard') : view('home'))->name('home');
-Route::get('/login', fn () => redirect()->route('home'))->name('login');
-
-Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
-Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+Route::middleware('guest')->group(function () {
+    Route::get('/', fn () => view('home'))->name('home');
+    Route::get('/login', fn () => redirect()->route('home'))->name('login');
+    Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
+    Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
