@@ -17,6 +17,9 @@
 /public/build
 /public/hot
 /public/storage
+/public_html/build
+/public_html/hot
+/public_html/storage
 /database/database.sqlite
 /storage/framework/cache
 /storage/framework/sessions

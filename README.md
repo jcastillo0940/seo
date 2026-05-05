@@ -2,6 +2,49 @@
 
 MVP en Laravel 13 para conectar Google Search Console, GA4 y Magento, sincronizar keywords de los ultimos 30 dias y disparar auditorias tecnicas con una interfaz Blade zero-NPM.
 
+## Deploy con `public_html`
+
+Este proyecto esta preparado para servidores compartidos donde el document root debe ser `public_html`.
+
+El frontend debe compilarse localmente y luego subirse ya generado:
+
+```bash
+npm install
+npm run build
+```
+
+Eso genera los assets en `public_html/build`.
+
+Sube al servidor:
+
+- `app/`
+- `bootstrap/`
+- `config/`
+- `database/`
+- `resources/`
+- `routes/`
+- `storage/`
+- `vendor/`
+- `public_html/`
+- `artisan`
+- `composer.json`
+- `composer.lock`
+
+No subas:
+
+- `.env`
+- `node_modules/`
+- `database/database.sqlite`
+- caches temporales de `storage/`
+
+En hosting tipo cPanel:
+
+1. El dominio debe apuntar a `public_html/`.
+2. Ejecuta `composer install --no-dev --optimize-autoloader` localmente o en un entorno con suficiente recursos.
+3. Ejecuta `php artisan config:clear`
+4. Ejecuta `php artisan migrate --force`
+5. Ejecuta `php artisan queue:work` o configura un worker/cron equivalente
+
 ## Incluye
 
 - Login con Google preparado para `Laravel Socialite`.
