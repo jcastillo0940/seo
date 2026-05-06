@@ -8,6 +8,7 @@ use App\Http\Controllers\ProjectSettingsController;
 use App\Http\Controllers\SeoCrawlerController;
 use App\Http\Controllers\SerpTrackingController;
 use App\Http\Controllers\TrackedKeywordController;
+use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -19,6 +20,14 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/resumen', [WorkspaceController::class, 'summary'])->name('workspace.summary');
+    Route::get('/deep-scan', [WorkspaceController::class, 'deepScan'])->name('workspace.deep-scan');
+    Route::get('/keyword-hunter', [WorkspaceController::class, 'keywordHunter'])->name('workspace.keyword-hunter');
+    Route::get('/serp-tracking', [WorkspaceController::class, 'serpTracking'])->name('workspace.serp-tracking');
+    Route::get('/competidores', [WorkspaceController::class, 'competitors'])->name('workspace.competitors');
+    Route::get('/conexiones', [WorkspaceController::class, 'connections'])->name('workspace.connections');
+    Route::get('/oportunidades', [WorkspaceController::class, 'opportunities'])->name('workspace.opportunities');
+    Route::get('/auditoria', [WorkspaceController::class, 'audit'])->name('workspace.audit');
     Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
     Route::post('/project/settings', [ProjectSettingsController::class, 'update'])->name('project.settings.update');
     Route::post('/project/sync-magento', [ProjectSettingsController::class, 'syncMagento'])->name('project.sync-magento');

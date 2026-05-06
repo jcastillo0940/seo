@@ -217,6 +217,37 @@ class DashboardTest extends TestCase
         Queue::assertPushed(\App\Jobs\RunSeoCrawl::class);
     }
 
+    public function test_authenticated_user_can_open_all_workspace_views(): void
+    {
+        $user = User::factory()->create();
+
+        Project::create([
+            'user_id' => $user->id,
+            'name' => 'Mi Dominio',
+            'url' => 'https://midominio.com',
+            'google_property_id' => 'sc-domain:midominio.com',
+            'google_property_type' => 'sc-domain',
+        ]);
+
+        $pages = [
+            '/resumen' => 'Command Center',
+            '/deep-scan' => 'Deep Scan',
+            '/keyword-hunter' => 'Keyword Hunter',
+            '/serp-tracking' => 'SERP Tracking',
+            '/competidores' => 'Competidores',
+            '/conexiones' => 'Conexiones del proyecto',
+            '/oportunidades' => 'Oportunidades',
+            '/auditoria' => 'Auditoria',
+        ];
+
+        foreach ($pages as $url => $expectedText) {
+            $this->actingAs($user)
+                ->get($url)
+                ->assertOk()
+                ->assertSee($expectedText);
+        }
+    }
+
     public function test_unauthorized_google_user_is_rejected(): void
     {
         config()->set('seo.demo_mode', false);
