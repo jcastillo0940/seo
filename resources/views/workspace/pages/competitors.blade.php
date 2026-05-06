@@ -24,9 +24,20 @@
                 <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">RIVAL</p>
                 <p class="mt-2 text-lg font-bold text-slate-900">{{ $competitor->domain }}</p>
                 <div class="mt-5 flex items-end justify-between">
-                    <div><p class="text-[10px] uppercase tracking-[0.22em] text-slate-400">Nombre</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ $competitor->name }}</p></div>
-                    <div class="text-right"><p class="text-[10px] uppercase tracking-[0.22em] text-slate-400">SoV</p><p class="mt-1 text-3xl font-bold text-slate-900">--%</p></div>
+                    <div>
+                        <p class="text-[10px] uppercase tracking-[0.22em] text-slate-400">Keywords</p>
+                        <p class="mt-1 text-4xl font-bold text-slate-900">{{ $competitor->keywords_count ?: '—' }}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] uppercase tracking-[0.22em] text-slate-400">Pos. media</p>
+                        <p class="mt-1 text-3xl font-bold {{ $competitor->avg_position ? 'text-slate-900' : 'text-slate-300' }}">
+                            {{ $competitor->avg_position ? '#'.number_format($competitor->avg_position, 1) : '—' }}
+                        </p>
+                    </div>
                 </div>
+                @if ($competitor->last_seen_at)
+                    <p class="mt-3 text-[10px] text-slate-400">Visto {{ $competitor->last_seen_at->diffForHumans() }}</p>
+                @endif
             </div>
         @empty
             <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500 xl:col-span-4">Todavia no has agregado competidores.</div>

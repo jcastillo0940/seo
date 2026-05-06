@@ -57,6 +57,7 @@ return [
     'serp' => [
         'provider' => env('SERP_PROVIDER', 'demo'),
         'api_key' => env('SERP_API_KEY'),
+        'cse_cx' => env('GOOGLE_CSE_CX'),
     ],
 
 ];

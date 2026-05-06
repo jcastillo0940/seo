@@ -11,6 +11,8 @@ class SyncMagentoCatalog implements ShouldQueue
 {
     use Queueable;
 
+    public int $timeout = 300;
+
     public function __construct(
         public Project $project,
     ) {

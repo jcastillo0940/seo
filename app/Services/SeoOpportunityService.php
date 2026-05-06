@@ -86,22 +86,26 @@ class SeoOpportunityService
 
     private function competitorGaps(Project $project)
     {
-        $latest = $project->serpSnapshots()->with('results.competitor')->latest('captured_at')->take(5)->get();
+        $latest = $project->serpSnapshots()->with(['results.competitor', 'trackedKeyword'])->latest('captured_at')->take(20)->get();
 
         return $latest
             ->flatMap(function ($snapshot) {
                 $ownPosition = optional($snapshot->results->firstWhere('is_own_domain', true))->position ?? 99;
 
                 return $snapshot->results
-                    ->filter(fn ($result) => ! $result->is_own_domain && $result->position < $ownPosition)
+                    ->filter(fn ($result) => ! $result->is_own_domain
+                        && $result->competitor_id !== null
+                        && $result->position < $ownPosition
+                    )
                     ->map(fn ($result) => [
-                        'keyword' => $snapshot->trackedKeyword->keyword,
-                        'competitor' => $result->competitor?->name ?: $result->domain,
+                        'keyword' => $snapshot->trackedKeyword?->keyword,
+                        'competitor' => $result->competitor->name,
                         'position' => $result->position,
                         'own_position' => $ownPosition,
                         'gap' => max(0, $ownPosition - $result->position),
                     ]);
             })
+            ->filter(fn ($row) => filled($row['keyword']))
             ->sortByDesc('gap')
             ->take(6)
             ->values();

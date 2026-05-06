@@ -17,6 +17,7 @@ class ProjectSettingsController extends Controller
             'magento_base_url' => ['nullable', 'url'],
             'magento_store_code' => ['nullable', 'string', 'max:50'],
             'magento_website_code' => ['nullable', 'string', 'max:50'],
+            'magento_api_token' => ['nullable', 'string', 'max:500'],
             'ga4_property_id' => ['nullable', 'string', 'max:50'],
         ]);
 

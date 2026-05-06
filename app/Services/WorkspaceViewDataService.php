@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\SerpResult;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Throwable;
@@ -90,7 +91,9 @@ class WorkspaceViewDataService
             $propertyError = $exception->getMessage();
         }
 
-        $competitors = $project?->competitors()->orderBy('domain')->get() ?? collect();
+        $competitors = $project
+            ? $this->competitorsWithMetrics($project)
+            : collect();
         $trackedKeywords = $project?->trackedKeywords()->orderBy('priority')->orderBy('keyword')->get() ?? collect();
         $projectDomain = $this->projectDomain($project);
         $issueBuckets = $this->issueBuckets($latestCrawlPages);
@@ -234,6 +237,36 @@ class WorkspaceViewDataService
                 'label' => $latestCrawlRun ? ($latestCrawlRun->status ?: 'activo') : 'pendiente',
             ],
         ];
+    }
+
+    protected function competitorsWithMetrics(Project $project): Collection
+    {
+        $competitors = $project->competitors()->orderBy('domain')->get();
+
+        if ($competitors->isEmpty()) {
+            return $competitors;
+        }
+
+        $metrics = SerpResult::query()
+            ->join('serp_snapshots', 'serp_results.serp_snapshot_id', '=', 'serp_snapshots.id')
+            ->where('serp_snapshots.project_id', $project->id)
+            ->whereIn('serp_results.competitor_id', $competitors->pluck('id'))
+            ->selectRaw('
+                serp_results.competitor_id,
+                COUNT(DISTINCT serp_snapshots.tracked_keyword_id) as keywords_count,
+                ROUND(AVG(serp_results.position), 1) as avg_position,
+                MIN(serp_results.position) as best_position
+            ')
+            ->groupBy('serp_results.competitor_id')
+            ->get()
+            ->keyBy('competitor_id');
+
+        return $competitors->each(function ($competitor) use ($metrics) {
+            $m = $metrics->get($competitor->id);
+            $competitor->keywords_count = (int) ($m?->keywords_count ?? 0);
+            $competitor->avg_position = $m ? (float) $m->avg_position : null;
+            $competitor->best_position = $m ? (int) $m->best_position : null;
+        });
     }
 
     protected function serpOverview(Collection $snapshots): array

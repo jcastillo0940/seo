@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'magento_base_url',
     'magento_store_code',
     'magento_website_code',
+    'magento_api_token',
     'last_synced_at',
     'magento_last_synced_at',
 ])]

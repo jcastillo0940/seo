@@ -53,7 +53,7 @@ class GoogleAnalyticsService
                         'fieldName' => 'sessionDefaultChannelGroup',
                         'stringFilter' => [
                             'value' => 'Organic Search',
-                            'exact' => true,
+                            'matchType' => 'EXACT',
                         ],
                     ],
                 ],

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Competitor;
 use App\Models\Project;
 use App\Models\TrackedKeyword;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -13,7 +14,11 @@ class SerpTrackingService
 {
     public function syncProject(Project $project): array
     {
-        $keywords = $project->trackedKeywords()->orderBy('priority')->orderBy('keyword')->get();
+        $keywords = $project->trackedKeywords()
+            ->orderByRaw("CASE WHEN search_intent = 'transactional' THEN 0 ELSE 1 END")
+            ->orderBy('priority')
+            ->orderBy('keyword')
+            ->get();
 
         if ($keywords->isEmpty()) {
             return ['snapshots' => 0, 'results' => 0];
@@ -23,44 +28,11 @@ class SerpTrackingService
         $resultsCount = 0;
 
         foreach ($keywords as $trackedKeyword) {
-            $payload = config('seo.demo_mode')
-                ? $this->demoSnapshot($project, $trackedKeyword)
-                : $this->liveSnapshot($project, $trackedKeyword);
-
-            $snapshot = $project->serpSnapshots()->create([
-                'tracked_keyword_id' => $trackedKeyword->id,
-                'provider' => $payload['provider'],
-                'search_engine' => 'google',
-                'country_code' => $trackedKeyword->country_code,
-                'language_code' => $trackedKeyword->language_code,
-                'device' => $trackedKeyword->device,
-                'results_count' => count($payload['results']),
-                'captured_at' => now(),
-                'raw_payload' => $payload['raw_payload'],
-            ]);
-
-            foreach ($payload['results'] as $result) {
-                $competitor = $this->resolveCompetitor($project, $result['domain']);
-
-                $snapshot->results()->create([
-                    'competitor_id' => $competitor?->id,
-                    'domain' => $result['domain'],
-                    'url' => $result['url'],
-                    'title' => $result['title'],
-                    'position' => $result['position'],
-                    'is_own_domain' => $result['is_own_domain'],
-                    'estimated_ctr' => $this->estimateCtr($result['position']),
-                    'estimated_traffic' => $this->estimateTraffic($project, $trackedKeyword, $result['position']),
-                ]);
-
-                if ($competitor) {
-                    $competitor->forceFill(['last_seen_at' => now()])->save();
-                }
-
-                $resultsCount++;
+            if (! config('seo.demo_mode') && $this->dailyLimitReached()) {
+                break;
             }
 
-            $trackedKeyword->forceFill(['last_checked_at' => now()])->save();
+            $resultsCount += $this->syncSingleKeyword($project, $trackedKeyword);
             $snapshotCount++;
         }
 
@@ -70,12 +42,104 @@ class SerpTrackingService
         ];
     }
 
+    public function syncSingleKeyword(Project $project, TrackedKeyword $trackedKeyword): int
+    {
+        $payload = config('seo.demo_mode')
+            ? $this->demoSnapshot($project, $trackedKeyword)
+            : $this->liveSnapshot($project, $trackedKeyword);
+
+        $snapshot = $project->serpSnapshots()->create([
+            'tracked_keyword_id' => $trackedKeyword->id,
+            'provider' => $payload['provider'],
+            'search_engine' => 'google',
+            'country_code' => $trackedKeyword->country_code,
+            'language_code' => $trackedKeyword->language_code,
+            'device' => $trackedKeyword->device,
+            'results_count' => count($payload['results']),
+            'captured_at' => now(),
+            'raw_payload' => $payload['raw_payload'],
+        ]);
+
+        $count = 0;
+
+        foreach ($payload['results'] as $result) {
+            $competitor = $this->resolveCompetitor($project, $result['domain']);
+
+            $snapshot->results()->create([
+                'competitor_id' => $competitor?->id,
+                'domain' => $result['domain'],
+                'url' => $result['url'],
+                'title' => $result['title'],
+                'position' => $result['position'],
+                'is_own_domain' => $result['is_own_domain'],
+                'estimated_ctr' => $this->estimateCtr($result['position']),
+                'estimated_traffic' => $this->estimateTraffic($project, $trackedKeyword, $result['position']),
+            ]);
+
+            if ($competitor) {
+                $competitor->forceFill(['last_seen_at' => now()])->save();
+            }
+
+            $count++;
+        }
+
+        $trackedKeyword->forceFill(['last_checked_at' => now()])->save();
+
+        return $count;
+    }
+
     private function liveSnapshot(Project $project, TrackedKeyword $trackedKeyword): array
     {
-        $provider = config('services.serp.provider');
+        return match (config('services.serp.provider')) {
+            'google' => $this->googleSnapshot($project, $trackedKeyword),
+            'serpapi' => $this->serpapiSnapshot($project, $trackedKeyword),
+            default => throw new RuntimeException('Configura SERP_PROVIDER (google o serpapi) y sus credenciales.'),
+        };
+    }
 
-        if ($provider !== 'serpapi' || blank(config('services.serp.api_key'))) {
-            throw new RuntimeException('Configura SERP provider y API key para tracking real de competencia.');
+    private function googleSnapshot(Project $project, TrackedKeyword $trackedKeyword): array
+    {
+        $apiKey = config('services.serp.api_key');
+        $cx = config('services.serp.cse_cx');
+
+        if (blank($apiKey) || blank($cx)) {
+            throw new RuntimeException('Configura SERP_API_KEY y GOOGLE_CSE_CX para usar Google Custom Search.');
+        }
+
+        $response = Http::withOptions(['force_ip_resolve' => 'v4'])
+            ->get('https://www.googleapis.com/customsearch/v1', [
+                'key' => $apiKey,
+                'cx' => $cx,
+                'q' => $trackedKeyword->keyword,
+                'num' => 10,
+                'gl' => strtolower($trackedKeyword->country_code),
+                'hl' => strtolower($trackedKeyword->language_code),
+            ])->throw()->json();
+
+        $this->incrementDailyCounter();
+
+        return [
+            'provider' => 'google_cse',
+            'raw_payload' => $response,
+            'results' => collect($response['items'] ?? [])
+                ->take(10)
+                ->map(fn (array $item, int $index) => [
+                    'domain' => $this->hostFromUrl($item['link'] ?? ''),
+                    'url' => $item['link'] ?? '',
+                    'title' => $item['title'] ?? '',
+                    'position' => $index + 1,
+                    'is_own_domain' => $this->isOwnDomain($project, $item['link'] ?? ''),
+                ])
+                ->filter(fn (array $item) => $item['domain'] !== '')
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function serpapiSnapshot(Project $project, TrackedKeyword $trackedKeyword): array
+    {
+        if (blank(config('services.serp.api_key'))) {
+            throw new RuntimeException('Configura SERP_API_KEY para usar SerpAPI.');
         }
 
         $response = Http::get('https://serpapi.com/search.json', [
@@ -88,6 +152,8 @@ class SerpTrackingService
             'device' => $trackedKeyword->device,
             'num' => 10,
         ])->throw()->json();
+
+        $this->incrementDailyCounter();
 
         return [
             'provider' => 'serpapi',
@@ -154,7 +220,15 @@ class SerpTrackingService
 
     private function resolveCompetitor(Project $project, string $domain): ?Competitor
     {
-        return $project->competitors()->where('domain', $domain)->first();
+        $bare = Str::replaceFirst('www.', '', $domain);
+
+        return $project->competitors()
+            ->where(fn ($q) => $q
+                ->where('domain', $domain)
+                ->orWhere('domain', $bare)
+                ->orWhere('domain', 'www.'.$bare)
+            )
+            ->first();
     }
 
     private function estimateCtr(int $position): float
@@ -187,6 +261,25 @@ class SerpTrackingService
 
     private function hostFromUrl(string $url): string
     {
-        return Str::lower((string) parse_url($url, PHP_URL_HOST));
+        $host = Str::lower((string) parse_url($url, PHP_URL_HOST));
+
+        return Str::replaceFirst('www.', '', $host);
+    }
+
+    private function dailyLimitReached(): bool
+    {
+        $limit = (int) config('seo.serp_daily_limit', 100);
+        $key = 'serp_daily_queries:'.now()->toDateString();
+
+        return Cache::get($key, 0) >= $limit;
+    }
+
+    private function incrementDailyCounter(): void
+    {
+        $key = 'serp_daily_queries:'.now()->toDateString();
+        $secondsUntilMidnight = now()->secondsUntilEndOfDay() + 1;
+
+        Cache::add($key, 0, $secondsUntilMidnight);
+        Cache::increment($key);
     }
 }
