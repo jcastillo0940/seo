@@ -5,7 +5,7 @@
                 <p class="text-[11px] font-bold uppercase tracking-[0.28em] text-slate-400">Settings & Integrations</p>
                 <span class="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600">Sincronizado</span>
             </div>
-            <h1 class="mt-2 text-2xl font-bold text-slate-900">Conexiones del Proyecto</h1>
+            <h1 class="mt-2 text-2xl font-bold text-slate-900">Conexiones del proyecto</h1>
         </div>
         <div class="flex gap-2">
             <button form="settingsForm" type="submit" class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-primary/90">

@@ -203,9 +203,9 @@ class SerpTrackingService
 
         if (count($results) < 3) {
             $results[] = [
-                'domain' => 'marketplace-demo.com',
-                'url' => 'https://marketplace-demo.com/'.Str::slug($trackedKeyword->keyword),
-                'title' => 'Marketplace Demo | '.$trackedKeyword->keyword,
+                'domain' => 'demo-super-pa.pa',
+                'url' => 'https://demo-super-pa.pa/'.Str::slug($trackedKeyword->keyword),
+                'title' => 'Demo Super PA | '.$trackedKeyword->keyword,
                 'position' => count($results) + 1,
                 'is_own_domain' => false,
             ];

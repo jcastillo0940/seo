@@ -33,10 +33,11 @@ class SeoOpportunityService
                 $path = $this->pathFromUrl($catalogPage->url);
                 $crawl = $crawlPages->get($path);
                 $metric = $analytics->get($path);
-                $issueCount = count($crawl?->issues ?? []);
+                $issues = collect($crawl?->issues ?? []);
+                $issueCount = $issues->count();
                 $sessions = (int) ($metric?->sessions ?? 0);
                 $conversions = (int) ($metric?->conversions ?? 0);
-
+                $conversionRate = $sessions > 0 ? round(($conversions / $sessions) * 100, 2) : 0;
                 $score = ($sessions * 0.45)
                     + ($catalogPage->product_count * 2)
                     + ($issueCount * 18)
@@ -49,12 +50,16 @@ class SeoOpportunityService
                     'score' => (int) round($score),
                     'sessions' => $sessions,
                     'conversions' => $conversions,
+                    'conversion_rate' => $conversionRate,
                     'issue_count' => $issueCount,
-                    'top_issue' => $crawl?->issues[0]['label'] ?? 'Sin issues tecnicos fuertes',
+                    'top_issue' => $issues->first()['label'] ?? 'Sin issue tecnico fuerte',
+                    'impact' => $sessions >= 100 ? 'Alto' : 'Medio',
+                    'effort' => $issueCount >= 3 ? 'Medio' : 'Bajo',
+                    'actions' => $this->pageActions($catalogPage->type, $issues->pluck('code')->all(), $sessions, $conversions),
                 ];
             })
             ->sortByDesc('score')
-            ->take(6)
+            ->take(8)
             ->values();
     }
 
@@ -78,8 +83,8 @@ class SeoOpportunityService
                     'clicks' => (int) $row->clicks,
                     'ctr' => round($ctr, 2),
                     'hint' => $row->avg_position <= 10
-                        ? 'Optimiza CTR con title y meta description.'
-                        : 'Necesita mejor contenido o enlaces internos para entrar al top 10.',
+                        ? 'Optimiza CTR con title, meta description y un ángulo comercial más claro.'
+                        : 'Necesita mejor contenido y más enlaces internos para entrar al top 10.',
                 ];
             });
     }
@@ -109,6 +114,46 @@ class SeoOpportunityService
             ->sortByDesc('gap')
             ->take(6)
             ->values();
+    }
+
+    private function pageActions(string $type, array $issueCodes, int $sessions, int $conversions): array
+    {
+        $actions = collect();
+
+        if (in_array('missing_title', $issueCodes, true)) {
+            $actions->push('Crear un title único con keyword principal, categoría y atributo comercial.');
+        }
+
+        if (in_array('missing_meta_description', $issueCodes, true)) {
+            $actions->push('Escribir una meta description que resuma beneficio, surtido y CTA.');
+        }
+
+        if (in_array('missing_h1', $issueCodes, true)) {
+            $actions->push('Agregar un H1 alineado con la intención de búsqueda real de la página.');
+        }
+
+        if (in_array('short_content', $issueCodes, true)) {
+            $actions->push('Expandir el contenido con FAQs, marcas, usos, beneficios y enlazado interno.');
+        }
+
+        if (in_array('images_missing_alt', $issueCodes, true)) {
+            $actions->push('Completar atributos alt descriptivos en imágenes clave de producto o categoría.');
+        }
+
+        if ($sessions > 0 && $conversions === 0) {
+            $actions->push('Reforzar intención transaccional con precio, disponibilidad y señales de confianza.');
+        }
+
+        if ($type === 'category') {
+            $actions->push('Enlazar esta categoría desde home, menú y categorías relacionadas para subir autoridad interna.');
+        }
+
+        return $actions
+            ->filter()
+            ->unique()
+            ->take(4)
+            ->values()
+            ->all();
     }
 
     private function pathFromUrl(?string $url): string

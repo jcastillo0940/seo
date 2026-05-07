@@ -11,11 +11,12 @@
     ];
     $currentPage = $workspacePages[$page] ?? $workspacePages['summary'];
     $latestSync = $project?->last_synced_at?->diffForHumans() ?? 'never';
+    $marketLabel = $workspaceLocale['market_label'] ?? 'PA · es-pa';
 @endphp
 
 <x-layouts.app>
-    <div class="flex min-h-screen overflow-hidden bg-brandbg text-slate-800 font-sans" x-data="{ sidebarOpen: false }">
-        <div x-show="sidebarOpen" x-cloak x-transition.opacity @click="sidebarOpen = false" class="fixed inset-0 z-40 bg-slate-900/40 md:hidden"></div>
+    <div class="flex min-h-screen overflow-hidden bg-white text-slate-800 font-sans" x-data="{ sidebarOpen: false }">
+        <div x-show="sidebarOpen" x-cloak x-transition.opacity @click="sidebarOpen = false" class="fixed inset-0 z-40 bg-slate-900/20 md:hidden"></div>
 
         <aside
             class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col border-r border-slate-200 bg-white shadow-[8px_0_30px_rgba(15,23,42,0.04)] transition-transform md:relative md:translate-x-0"
@@ -25,7 +26,7 @@
                 <div class="flex items-center gap-3">
                     <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white">O</div>
                     <div>
-                        <p class="text-lg font-bold tracking-wide text-primary">360·SEO</p>
+                        <p class="text-lg font-bold tracking-wide text-primary">360 SEO</p>
                     </div>
                 </div>
                 <button class="text-slate-400 md:hidden" @click="sidebarOpen = false">
@@ -80,7 +81,7 @@
         </aside>
 
         <div class="flex min-w-0 flex-1 flex-col">
-            <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+            <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
                 <div class="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
                     <div class="flex min-w-0 items-center gap-3">
                         <button class="text-slate-500 md:hidden" @click="sidebarOpen = true">
@@ -92,7 +93,7 @@
                                 <span class="text-slate-300">/</span>
                                 <span class="truncate text-slate-400">{{ $projectDomain }}</span>
                                 <span class="hidden text-slate-300 lg:inline">/</span>
-                                <span class="hidden text-xs font-semibold uppercase tracking-[0.22em] text-slate-400 lg:inline">MX · es-MX</span>
+                                <span class="hidden text-xs font-semibold uppercase tracking-[0.22em] text-slate-400 lg:inline">{{ $marketLabel }}</span>
                             </div>
                         </div>
                     </div>
@@ -108,7 +109,7 @@
                 </div>
             </header>
 
-            <main class="flex-1 p-4 md:p-6 lg:p-7">
+            <main class="flex-1 bg-white p-4 md:p-6 lg:p-7">
                 <div class="mx-auto max-w-[1440px]">
                     @if (session('status'))
                         <div class="mb-6 rounded-2xl border border-success/20 bg-success/10 px-5 py-4 text-sm text-emerald-700">

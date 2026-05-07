@@ -28,7 +28,7 @@
                             rival2: '#ffd166',
                             rival3: '#9b5de5',
                             rival4: '#00bbf9',
-                            brandbg: '#f8fafc',
+                            brandbg: '#ffffff',
                         }
                     }
                 }
@@ -43,7 +43,7 @@
             ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         </style>
     </head>
-    <body class="bg-brandbg text-slate-800 font-sans antialiased">
+    <body class="bg-white text-slate-800 font-sans antialiased">
         {{ $slot }}
     </body>
 </html>
